@@ -503,6 +503,12 @@ static lbm_value ext_get_encoder(lbm_value *args, lbm_uint argn) {
 	return lbm_enc_float(encoder_read_deg());
 }
 
+static lbm_value ext_set_encoder(lbm_value *args, lbm_uint argn) {
+	LBM_CHECK_ARGN_NUMBER(1);
+	encoder_set_deg(lbm_dec_as_float(args[0]));
+	return ENC_SYM_TRUE;
+}
+
 static lbm_value ext_get_encoder_error_rate(lbm_value *args, lbm_uint argn) {
 	(void)args; (void)argn;
 	return lbm_enc_float(encoder_get_error_rate());
@@ -1144,33 +1150,38 @@ static lbm_value ext_can_cmd(lbm_value *args, lbm_uint argn) {
 
 // App set commands
 static lbm_value ext_app_adc_detach(lbm_value *args, lbm_uint argn) {
-	if (argn == 1){
-		if(lbm_dec_as_u32(args[0]) != 0){
-			return ENC_SYM_EERROR;
+	if (argn == 1) {
+		if(lbm_dec_as_u32(args[0]) != 0) {
+			return ENC_SYM_TERROR;
 		}
-	}else{
+	} else {
 		LBM_CHECK_ARGN_NUMBER(2);
 	}
+
 	uint32_t mode = lbm_dec_as_u32(args[0]);
-	bool detach = lbm_dec_as_char(args[1]) > 0 ? true : false;
+	int detach = lbm_dec_as_i32(args[1]);
+
 	switch (mode){
 		case 0:
-			app_adc_detach_adc(false);
+			app_adc_detach_adc(0);
 			app_adc_detach_buttons(false);
 			break;
 		case 1:
 			app_adc_detach_adc(detach);
+			app_adc_detach_buttons(false);
 			break;
 		case 2:
-			app_adc_detach_buttons(detach);
+			app_adc_detach_adc(0);
+			app_adc_detach_buttons(detach > 0);
 			break;
 		case 3:
 			app_adc_detach_adc(detach);
-			app_adc_detach_buttons(detach);
+			app_adc_detach_buttons(detach > 0);
 			break;
 		default:
 			return ENC_SYM_EERROR;
 	}
+
 	return ENC_SYM_TRUE;
 }
 
@@ -1349,9 +1360,36 @@ static lbm_value ext_foc_beep(lbm_value *args, lbm_uint argn) {
 
 // Motor get commands
 
+static bool check_arg_filter(lbm_value *args, lbm_uint argn, int *res) {
+	*res = 0;
+	if (argn > 1) {
+		lbm_set_error_reason((char*)lbm_error_str_num_args);
+		return false;
+	}
+
+	if (argn == 1) {
+		if (!lbm_is_number(args[0])) {
+			lbm_set_error_reason((char*)lbm_error_str_no_number);
+			return false;
+		}
+
+		*res = lbm_dec_as_i32(args[0]);
+	}
+
+	return true;
+}
+
 static lbm_value ext_get_current(lbm_value *args, lbm_uint argn) {
-	(void)args; (void)argn;
-	return lbm_enc_float(mc_interface_get_tot_current_filtered());
+	int filter = 0;
+	if (!check_arg_filter(args, argn, &filter)) {
+		return ENC_SYM_TERROR;
+	}
+
+	if (filter == 1) {
+		return lbm_enc_float(mc_interface_read_reset_avg_motor_current());
+	} else {
+		return lbm_enc_float(mc_interface_get_tot_current_filtered());
+	}
 }
 
 static lbm_value ext_get_current_dir(lbm_value *args, lbm_uint argn) {
@@ -1360,28 +1398,68 @@ static lbm_value ext_get_current_dir(lbm_value *args, lbm_uint argn) {
 }
 
 static lbm_value ext_get_current_in(lbm_value *args, lbm_uint argn) {
-	(void)args; (void)argn;
-	return lbm_enc_float(mc_interface_get_tot_current_in_filtered());
+	int filter = 0;
+	if (!check_arg_filter(args, argn, &filter)) {
+		return ENC_SYM_TERROR;
+	}
+
+	if (filter == 1) {
+		return lbm_enc_float(mc_interface_read_reset_avg_input_current());
+	} else {
+		return lbm_enc_float(mc_interface_get_tot_current_in_filtered());
+	}
 }
 
 static lbm_value ext_get_id(lbm_value *args, lbm_uint argn) {
-	(void)args; (void)argn;
-	return lbm_enc_float(mcpwm_foc_get_id_filter());
+	int filter = 0;
+	if (!check_arg_filter(args, argn, &filter)) {
+		return ENC_SYM_TERROR;
+	}
+
+	if (filter == 1) {
+		return lbm_enc_float(mc_interface_read_reset_avg_id());
+	} else {
+		return lbm_enc_float(mcpwm_foc_get_id_filter());
+	}
 }
 
 static lbm_value ext_get_iq(lbm_value *args, lbm_uint argn) {
-	(void)args; (void)argn;
-	return lbm_enc_float(mcpwm_foc_get_iq_filter());
+	int filter = 0;
+	if (!check_arg_filter(args, argn, &filter)) {
+		return ENC_SYM_TERROR;
+	}
+
+	if (filter == 1) {
+		return lbm_enc_float(mc_interface_read_reset_avg_iq());
+	} else {
+		return lbm_enc_float(mcpwm_foc_get_iq_filter());
+	}
 }
 
 static lbm_value ext_get_vd(lbm_value *args, lbm_uint argn) {
-	(void)args; (void)argn;
-	return lbm_enc_float(mcpwm_foc_get_vd());
+	int filter = 0;
+	if (!check_arg_filter(args, argn, &filter)) {
+		return ENC_SYM_TERROR;
+	}
+
+	if (filter == 1) {
+		return lbm_enc_float(mc_interface_read_reset_avg_vd());
+	} else {
+		return lbm_enc_float(mcpwm_foc_get_vd());
+	}
 }
 
 static lbm_value ext_get_vq(lbm_value *args, lbm_uint argn) {
-	(void)args; (void)argn;
-	return lbm_enc_float(mcpwm_foc_get_vq());
+	int filter = 0;
+	if (!check_arg_filter(args, argn, &filter)) {
+		return ENC_SYM_TERROR;
+	}
+
+	if (filter == 1) {
+		return lbm_enc_float(mc_interface_read_reset_avg_vq());
+	} else {
+		return lbm_enc_float(mcpwm_foc_get_vq());
+	}
 }
 
 static lbm_value ext_foc_est_lambda(lbm_value *args, lbm_uint argn) {
@@ -2343,7 +2421,7 @@ static lbm_value ext_i2c_tx_rx(lbm_value *args, lbm_uint argn) {
 	uint8_t *txbuf = 0;
 	uint8_t *rxbuf = 0;
 
-	const unsigned int max_len = 20;
+	const unsigned int max_len = 40;
 	uint8_t to_send[max_len];
 
 	if (!lbm_is_number(args[0])) {
@@ -2925,7 +3003,7 @@ static lbm_value ext_conf_detect_foc(lbm_value *args, lbm_uint argn) {
 static lbm_value ext_conf_set_pid_offset(lbm_value *args, lbm_uint argn) {
 	if (argn != 1 && argn != 2) {
 		lbm_set_error_reason((char*)lbm_error_str_num_args);
-		return ENC_SYM_EERROR;
+		return ENC_SYM_TERROR;
 	}
 
 	if (!lbm_is_number(args[0]) || (argn == 2 && !is_symbol_true_false(args[1]))) {
@@ -3103,6 +3181,7 @@ static lbm_uint sym_loop;
 static lbm_uint sym_break;
 static lbm_uint sym_brk;
 static lbm_uint sym_rst;
+static lbm_uint sym_return;
 
 static lbm_value ext_me_defun(lbm_value *argsi, lbm_uint argn) {
 	if (argn != 3) {
@@ -3122,6 +3201,31 @@ static lbm_value ext_me_defun(lbm_value *argsi, lbm_uint argn) {
 					lbm_enc_sym(SYM_LAMBDA),
 					args,
 					body));
+}
+
+static lbm_value ext_me_defunret(lbm_value *argsi, lbm_uint argn) {
+	if (argn != 3) {
+		return ENC_SYM_EERROR;
+	}
+
+	lbm_value name = argsi[0];
+	lbm_value args = argsi[1];
+	lbm_value body = argsi[2];
+
+	// (def name (lambda args (call-cc (lambda (return) body))))
+
+	return make_list(3,
+			lbm_enc_sym(SYM_DEFINE),
+			name,
+			make_list(3,
+					lbm_enc_sym(SYM_LAMBDA),
+					args,
+					make_list(2,
+							lbm_enc_sym(SYM_CALLCC),
+							make_list(3,
+									lbm_enc_sym(SYM_LAMBDA),
+									make_list(1, lbm_enc_sym(sym_return)),
+									body))));
 }
 
 static lbm_value ext_me_loopfor(lbm_value *args, lbm_uint argn) {
@@ -3804,6 +3908,7 @@ void lispif_load_vesc_extensions(void) {
 	lbm_add_symbol_const("break", &sym_break);
 	lbm_add_symbol_const("a03", &sym_brk);
 	lbm_add_symbol_const("a04", &sym_rst);
+	lbm_add_symbol_const("return", &sym_return);
 
 	memset(&syms_vesc, 0, sizeof(syms_vesc));
 
@@ -3813,6 +3918,7 @@ void lispif_load_vesc_extensions(void) {
 	lbm_add_extension("get-ppm", ext_get_ppm);
 	lbm_add_extension("get-ppm-age", ext_get_ppm_age);
 	lbm_add_extension("get-encoder", ext_get_encoder);
+	lbm_add_extension("set-encoder", ext_set_encoder);
 	lbm_add_extension("get-encoder-error-rate", ext_get_encoder_error_rate);
 	lbm_add_extension("set-servo", ext_set_servo);
 	lbm_add_extension("get-vin", ext_get_vin);
@@ -3980,6 +4086,7 @@ void lispif_load_vesc_extensions(void) {
 
 	// Macro expanders
 	lbm_add_extension("me-defun", ext_me_defun);
+	lbm_add_extension("me-defunret", ext_me_defunret);
 	lbm_add_extension("me-loopfor", ext_me_loopfor);
 	lbm_add_extension("me-loopwhile", ext_me_loopwhile);
 	lbm_add_extension("me-looprange", ext_me_looprange);

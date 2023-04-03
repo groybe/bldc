@@ -665,6 +665,18 @@ The mutually recursive program above evaluates to 1.
 
 ---
 
+Let supports deconstructive bindings. These are bindings that decompose a complex
+value into constituents.
+
+Example:
+
+```clj
+(let (( ( a . b) '(1 . 2) ))
+   (+ a b))
+```
+
+In the example, the bindings a = 1 and b = 2 are created for use in the let body.
+
 ### define
 
 You can give names to values in a global scope by using define.
@@ -736,6 +748,56 @@ And you can change the value of a `#var`.
 
 ---
 
+### set
+
+The `set` form is used to change the value of a variable in an environment.
+It behaves identical to `setvar`.
+
+Example:
+
+```clj
+(define a 10)
+```
+The variable `a` is now 10 in the global environment.
+
+```clj
+(set 'a 20)
+```
+
+And now `a` is associated with 20 in the global environment.
+
+`set` works in local environments too such as in the body of a `let`
+or in a `progn`-local variable created using `var`.
+
+Example:
+
+```clj
+(progn (var a 10) (set 'a 20) a)
+``` 
+
+The expression above evaluates to 20.
+
+### setq
+
+The `setq` special-form is similar to `set` and to `setvar` but expects the first argument
+to be a symbol. The first argument to `setq` is NOT evaluated.
+
+Example:
+```clj
+(define a 10)
+```
+The variable `a` is now 10 in the global environment.
+
+```clj
+(setq a 20)
+```
+
+And now `a` has been associated with the value 20 in the global env.
+
+Just like `set` and `setvar`, `setq` can be used on variables that
+are bound locally such as in the body of a `let` or a `progn`-local variable
+created using `var`. 
+
 ### progn
 
 The progn special form allows you to sequence a number of expressions.
@@ -765,6 +827,69 @@ This program evaluates 30 but also extends the global environment with the
 2 bindings `(a 10)` and `(b 20)` created using <a href="#define">define</a>.
 
 ---
+
+### {
+
+The curlybrace `{` syntax is a short-form (syntactic sugar) for `(progn`.
+The parser replaces occurrences of `{` with `(progn`. The `{` should be
+closed with an `}`. 
+
+These two programs are thus equivalent:
+
+```clj
+(progn
+  (define a 10)
+  (define b 20)
+  (+ a b))
+
+``` 
+
+And
+
+```clj
+{
+  (define a 10)
+  (define b 20)
+  (+ a b)
+}
+``` 
+
+---
+
+### }
+
+The closing curlybrace `}` should be used to close an opening `{` but purely
+for esthetical reasons. The `}` is treated identically to a regular closing parenthesis `)`.
+
+The opening `{` and closing `}` curlybraces are used as a short-form for `progn`-blocks
+of sequences expressions. 
+
+
+### var
+
+The var special form allows local bindings in a progn expression. A
+var expression is of the form (var symbol expr) and the symbol `symbol`
+is bound to the value that `expr` evaluates to withing the rest of the progn expression.
+
+Example:
+
+```clj
+(defun f ()
+  (progn
+    (var a 10)
+    (var b 20)
+    (+ a b)))
+```
+
+and:
+
+```clj
+(defun f ()
+  (progn
+    (var a 10)
+    (var b (+ a 10))
+    (+ a b)))
+```
 
 ### read
 
@@ -806,6 +931,40 @@ The expression above evaluates to 3 with the side effect that the global environ
 has been extended with the binding `(apa 1)`.
 
 ---
+
+### move-to-flash
+
+A value can be moved to flash storage to save space on the normal evaluation heap or lbm memory.
+A `move-to-flash` expression is of the form (move-to-flash sym opt-sym1 ... opt-symN).
+The symbols `sym`, `opt-sym1 ... opt-symN` should be globally bound to the values you want moved
+to flash. After the value has been moved, the environment binding is updated to point into flash
+memory. **CAUTION** This function should be used carefully. Ideally a value should be moved
+to flash immediately after it is created so there is no chance that other references to original value
+exists.
+
+Example that moves an array to flash storage:
+
+```clj
+(define a [1 2 3 4 5 6])
+
+(move-to-flash a)
+---
+
+Example that moves a list to flash storage:
+
+```clj
+(define ls '(1 2 3 4 5))
+
+(move-to-flash ls)
+```
+
+Functions can be moved to flash storage as well:
+
+```clj
+(defun f (x) (+ x 1))
+
+(move-to-flash f)
+```
 
 ## Lists and cons cells
 
